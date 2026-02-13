@@ -4,12 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "cd src-tauri && cargo run --bin server & vite --open",
+    "bootstrap": "pnpm install && pnpm build",
+    "dev": "bash -c 'trap \"kill 0\" EXIT; pnpm dev:server & pnpm dev:web & wait'",
     "dev:server": "cd src-tauri && cargo run --bin server",
-    "dev:browser": "vite",
-    "bootstrap": "pnpm install && cd src-tauri && cargo build --bin server && cd .. && pnpm build",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
+    "dev:web": "vite --open",
+    "build": "bash -c 'pnpm build:server & pnpm build:web & wait'",
+    "build:server": "cd src-tauri && cargo build --bin server",
+    "build:web": "tsc && vite build",
     "tauri": "tauri"
   },
   "dependencies": {
