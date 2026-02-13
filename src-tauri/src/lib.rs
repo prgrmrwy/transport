@@ -1,5 +1,5 @@
-mod server;
-mod transfer;
+pub mod server;
+pub mod transfer;
 
 use tauri::async_runtime::spawn;
 use transfer::throttle::Throttle;

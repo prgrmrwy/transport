@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "cd src-tauri && cargo run --bin server",
+    "dev:browser": "cd src-tauri && cargo run --bin server & vite --open",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
