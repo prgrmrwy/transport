@@ -118,6 +118,55 @@ Transport 是一个家庭内网高速文件传输与文件管理应用，支持 
 - 重命名/新建文件夹：右键菜单
 - 多选：Ctrl/Shift 多选批量操作
 
+## 浏览器模式
+
+除了 Tauri 原生应用，所有功能同时支持通过浏览器访问。任何设备（包括 iOS、智能电视等无法安装原生应用的设备）只要有浏览器，即可访问完整 UI。
+
+### 架构
+
+axum HTTP 服务在提供 REST API 的同时，额外 serve 打包后的 React SPA 静态资源：
+
+```
+axum HTTP 服务器
+├── /                       ← 落地页（应用分发 + "在浏览器中使用" 入口）
+├── /app                    ← React SPA 静态资源（浏览器模式完整 UI）
+├── /app/assets/*           ← JS/CSS 等静态文件
+├── /api/...                ← REST API（Tauri 和浏览器共用）
+└── /download/:platform     ← 安装包下载
+```
+
+### 环境检测与适配
+
+React 前端通过 `'__TAURI__' in window` 检测运行环境，在两种模式下行为有差异：
+
+| 能力 | Tauri 原生 | 浏览器模式 |
+|------|-----------|-----------|
+| 文件浏览/管理 | HTTP API | 同样走 HTTP API，无差异 |
+| 文件下载 | Tauri dialog 选路径 | 浏览器标准 `<a download>` |
+| 文件上传 | 拖拽 / dialog | `<input type="file">` / 拖拽，无差异 |
+| 设备发现 | mDNS 自动发现 | 不可用，仅显示当前连接的设备 |
+| 限速设置 | Tauri IPC | 走 HTTP API `/api/settings/throttle` |
+| 传输通知 | 系统原生通知 | 浏览器 Notification API |
+
+### localApi 适配策略
+
+`services/localApi.ts` 中统一处理环境差异：
+
+```
+Tauri 模式:  invoke("get_devices")         → mDNS 结果
+浏览器模式:  fetch("/api/device/info")      → 仅当前设备
+
+Tauri 模式:  invoke("set_throttle_rate")   → Tauri IPC
+浏览器模式:  fetch("/api/settings/throttle") → HTTP API
+```
+
+### 额外收益
+
+- iOS 设备通过 Safari 访问完整功能
+- 智能电视、游戏机等任何有浏览器的设备可用
+- 临时用户无需安装，浏览器直接使用
+- 落地页无缝衔接：分发页 → "在浏览器中使用" 按钮
+
 ## 安全
 
 - 无需验证，局域网内直接信任

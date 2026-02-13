@@ -2722,7 +2722,224 @@ git commit -m "feat: add drag-drop upload and context menu"
 
 ---
 
-### Task 22: 端到端验证与修复
+## Phase 6.5: 浏览器模式
+
+### Task 22: axum serve React SPA 静态资源
+
+**Files:**
+- Modify: `src-tauri/src/server/mod.rs`
+- Modify: `src-tauri/src/server/routes.rs`
+- Modify: `src-tauri/Cargo.toml`
+
+**说明:** axum 在 `/app` 路径下 serve Vite 打包后的 React SPA 静态资源，使浏览器可以访问完整 UI。
+
+**Step 1: 添加 tower-http serve-dir 支持**
+
+`Cargo.toml` 的 `tower-http` features 中添加 `"fs"`:
+```toml
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+```
+
+**Step 2: 配置静态资源路由**
+
+`src-tauri/src/server/mod.rs` 中添加:
+```rust
+use tower_http::services::{ServeDir, ServeFile};
+
+// 在 Router 构建中添加:
+// Vite 打包输出在 ../dist（相对于 src-tauri），运行时路径需要动态解析
+let frontend_dist = std::env::current_exe()
+    .ok()
+    .and_then(|p| p.parent().map(|p| p.join("../dist")))
+    .unwrap_or_else(|| std::path::PathBuf::from("../dist"));
+
+let app = Router::new()
+    .route("/", get(landing::landing_page))
+    .route("/download/{platform}", get(landing::download_installer))
+    .nest("/api", api_routes)
+    .nest_service("/app", ServeDir::new(&frontend_dist)
+        .fallback(ServeFile::new(frontend_dist.join("index.html"))))
+    .layer(CorsLayer::permissive())
+    .with_state(AppState { throttle });
+```
+
+SPA fallback 确保 `/app/settings` 等前端路由也能正确返回 `index.html`。
+
+**Step 3: 编译验证**
+
+```bash
+cd /mnt/d/apps/transport && pnpm build
+cd /mnt/d/apps/transport/src-tauri && cargo build
+```
+
+**Step 4: 提交**
+
+```bash
+git add -A
+git commit -m "feat: serve React SPA via axum for browser mode"
+```
+
+---
+
+### Task 23: 限速设置 HTTP API（供浏览器模式使用）
+
+**Files:**
+- Modify: `src-tauri/src/server/handlers.rs`
+- Modify: `src-tauri/src/server/routes.rs`
+
+**说明:** 浏览器模式无法使用 Tauri IPC，需要通过 HTTP API 设置限速。
+
+**Step 1: 添加限速设置 handler**
+
+`handlers.rs`:
+```rust
+#[derive(serde::Deserialize)]
+pub struct ThrottleRequest {
+    pub bytes_per_sec: u64,
+}
+
+pub async fn get_throttle(
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
+    let rate = state.throttle.get_rate().await;
+    Json(serde_json::json!({"bytes_per_sec": rate}))
+}
+
+pub async fn set_throttle(
+    State(state): State<AppState>,
+    Json(body): Json<ThrottleRequest>,
+) -> Json<serde_json::Value> {
+    state.throttle.set_rate(body.bytes_per_sec).await;
+    Json(serde_json::json!({"ok": true}))
+}
+```
+
+同时给 Throttle 加一个 `get_rate` 方法:
+```rust
+pub async fn get_rate(&self) -> u64 {
+    *self.bytes_per_sec.lock().await
+}
+```
+
+**Step 2: 注册路由**
+
+```rust
+.route("/settings/throttle", get(handlers::get_throttle).put(handlers::set_throttle))
+```
+
+**Step 3: 编译验证并提交**
+
+```bash
+cd /mnt/d/apps/transport/src-tauri && cargo build
+git add -A
+git commit -m "feat: add throttle settings HTTP API for browser mode"
+```
+
+---
+
+### Task 24: localApi 浏览器模式适配
+
+**Files:**
+- Modify: `src/services/localApi.ts`
+- Create: `src/lib/env.ts`
+
+**说明:** 检测运行环境（Tauri vs 浏览器），在浏览器模式下 fallback 到 HTTP API。
+
+**Step 1: 创建环境检测工具**
+
+`src/lib/env.ts`:
+```ts
+export const isTauri = '__TAURI__' in window;
+
+/** 浏览器模式下，当前连接的设备就是 URL 中的 host */
+export function currentDeviceOrigin(): string {
+  return window.location.origin;
+}
+```
+
+**Step 2: 改造 localApi.ts 支持双模式**
+
+`src/services/localApi.ts`:
+```ts
+import { isTauri, currentDeviceOrigin } from "../lib/env";
+import { Device } from "../types";
+
+export async function getDevices(): Promise<Device[]> {
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("get_devices");
+  }
+  // 浏览器模式：只能看到当前连接的设备
+  const device = await getLocalDeviceInfo();
+  return [device];
+}
+
+export async function getLocalDeviceInfo(): Promise<Device> {
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("get_local_device_info");
+  }
+  const res = await fetch(`${currentDeviceOrigin()}/api/device/info`);
+  return res.json();
+}
+
+export async function setThrottleRate(bytesPerSec: number): Promise<void> {
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke("set_throttle_rate", { bytesPerSec });
+  }
+  await fetch(`${currentDeviceOrigin()}/api/settings/throttle`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bytes_per_sec: bytesPerSec }),
+  });
+}
+```
+
+动态 `import()` 确保浏览器环境不会加载 `@tauri-apps/api`。
+
+**Step 3: 更新 FileBrowser 中的 remoteApi 调用**
+
+浏览器模式下，选中设备的 IP/端口就是当前页面的 host，`remoteApi` 已经用 `http://${ip}:${port}` 调用，无需改动。
+
+**Step 4: 提交**
+
+```bash
+git add -A
+git commit -m "feat: adapt localApi for browser mode with env detection"
+```
+
+---
+
+### Task 25: 落地页添加 "在浏览器中使用" 入口
+
+**Files:**
+- Modify: `src-tauri/assets/landing.html`
+
+**Step 1: 在落地页 HTML 中添加浏览器使用按钮**
+
+在 `.others` div 之前添加:
+```html
+<div style="margin-top:1.5rem;">
+  <a class="btn" href="/app" style="background:#10b981;">
+    在浏览器中直接使用
+  </a>
+  <p style="color:#64748b;font-size:0.75rem;margin-top:0.5rem;">
+    无需安装，直接管理本设备的文件
+  </p>
+</div>
+```
+
+**Step 2: 提交**
+
+```bash
+git add -A
+git commit -m "feat: add browser mode entry on landing page"
+```
+
+---
+
+### Task 26: 端到端验证与修复
 
 **Step 1: 启动应用**
 
@@ -2730,7 +2947,7 @@ git commit -m "feat: add drag-drop upload and context menu"
 pnpm tauri dev
 ```
 
-**Step 2: 验证清单**
+**Step 2: Tauri 原生模式验证清单**
 
 - [ ] 应用启动后顶部栏显示本机信息
 - [ ] 设备列表显示本机
@@ -2745,7 +2962,18 @@ pnpm tauri dev
 - [ ] 删除文件/文件夹工作
 - [ ] 传输队列显示进度
 - [ ] 设置页限速滑块工作
+
+**Step 3: 浏览器模式验证清单**
+
 - [ ] 浏览器访问 http://localhost:8090/ 显示分发落地页
+- [ ] 落地页有 "在浏览器中直接使用" 按钮
+- [ ] 点击进入 http://localhost:8090/app 显示完整 UI
+- [ ] 浏览器中能浏览文件列表
+- [ ] 浏览器中能上传文件
+- [ ] 浏览器中能下载文件
+- [ ] 浏览器中能删除/重命名/新建文件夹
+- [ ] 浏览器中设置页限速工作
+- [ ] 浏览器中 SPA 路由刷新不 404（fallback 正常）
 
 **Step 3: 修复发现的问题**
 
@@ -2797,7 +3025,7 @@ tauri-plugin-notification = "2"
 axum = { version = "0.8", features = ["multipart"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-stream = "0.3"
