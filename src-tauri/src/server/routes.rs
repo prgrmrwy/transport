@@ -20,5 +20,6 @@ pub fn api_routes() -> Router<AppState> {
             "/settings/throttle",
             get(handlers::get_throttle).put(handlers::set_throttle),
         )
+        .route("/logs", post(handlers::receive_logs))
         .layer(DefaultBodyLimit::disable())
 }

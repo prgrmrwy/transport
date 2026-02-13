@@ -3,6 +3,7 @@ export interface Device {
   ip: string;
   port: number;
   platform: string;
+  home_dir: string;
 }
 
 export interface FileEntry {

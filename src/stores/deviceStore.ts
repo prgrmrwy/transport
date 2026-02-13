@@ -15,6 +15,10 @@ export const useDeviceStore = create<DeviceStore>((set) => ({
   localDevice: null,
   selectedDevice: null,
   setDevices: (devices) => set({ devices }),
-  setLocalDevice: (device) => set({ localDevice: device }),
+  setLocalDevice: (device) =>
+    set((state) => ({
+      localDevice: device,
+      selectedDevice: state.selectedDevice ?? device,
+    })),
   selectDevice: (device) => set({ selectedDevice: device }),
 }));
