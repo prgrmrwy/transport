@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transport - 内网文件传输</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f172a; color: #e2e8f0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center; }
+  .container { text-align: center; max-width: 480px; padding: 2rem; }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  .subtitle { color: #94a3b8; margin-bottom: 2rem; }
+  .section { background: #1e293b; border-radius: 12px; padding: 1.5rem;
+    margin-bottom: 1.5rem; }
+  .section p { color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.75rem; }
+  .btn { display: inline-block; padding: 0.75rem 2rem; border-radius: 8px;
+    text-decoration: none; font-weight: 600; font-size: 1rem;
+    background: #3b82f6; color: white; transition: background 0.2s; border: none; cursor: pointer; }
+  .btn:hover { background: #2563eb; }
+  .btn-secondary { background: #475569; }
+  .btn-secondary:hover { background: #64748b; }
+  .others { margin-top: 1.5rem; }
+  .others a { color: #60a5fa; text-decoration: none; margin: 0 0.75rem;
+    font-size: 0.875rem; }
+  .others a:hover { text-decoration: underline; }
+  .hidden { display: none; }
+  .divider { border-top: 1px solid #334155; margin: 1rem 0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Transport</h1>
+  <p class="subtitle">家庭内网高速文件传输工具</p>
+
+  <!-- Browser mode entry -->
+  <div class="section">
+    <p>直接在浏览器中管理文件，无需安装任何应用</p>
+    <a class="btn" href="/app">在浏览器中使用</a>
+  </div>
+
+  <!-- App download -->
+  <div class="section">
+    <p>检测到你正在使用 <strong id="platform">未知平台</strong></p>
+    <a id="main-btn" class="btn btn-secondary hidden" href="#">下载客户端</a>
+    <p id="no-installer" class="hidden" style="color:#f87171;font-size:0.875rem;">该平台暂无可用安装包</p>
+  </div>
+
+  <div class="others">
+    <span style="color:#64748b;font-size:0.875rem;">其他平台：</span>
+    <a id="link-windows" class="hidden" href="/download/windows">Windows (.exe)</a>
+    <a id="link-macos" class="hidden" href="/download/macos">macOS (.dmg)</a>
+    <a id="link-android" class="hidden" href="/download/android">Android (.apk)</a>
+  </div>
+</div>
+<script>
+  const ua = navigator.userAgent.toLowerCase();
+  const platformEl = document.getElementById('platform');
+  const mainBtn = document.getElementById('main-btn');
+  let detected = 'unknown';
+
+  if (ua.includes('android')) detected = 'android';
+  else if (ua.includes('mac')) detected = 'macos';
+  else if (ua.includes('win')) detected = 'windows';
+
+  const labels = { windows: 'Windows', macos: 'macOS', android: 'Android' };
+  platformEl.textContent = labels[detected] || '未知平台';
+
+  fetch('/api/installers').then(r => r.json()).then(data => {
+    const available = data.available || [];
+    if (available.includes(detected)) {
+      mainBtn.href = '/download/' + detected;
+      mainBtn.textContent = '下载 ' + labels[detected] + ' 版';
+      mainBtn.classList.remove('hidden');
+    } else {
+      document.getElementById('no-installer').classList.remove('hidden');
+    }
+    ['windows', 'macos', 'android'].forEach(p => {
+      if (p !== detected && available.includes(p)) {
+        document.getElementById('link-' + p).classList.remove('hidden');
+      }
+    });
+  }).catch(() => {
+    document.getElementById('no-installer').classList.remove('hidden');
+  });
+</script>
+</body>
+</html>

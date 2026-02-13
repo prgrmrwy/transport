@@ -1,8 +1,10 @@
 pub mod handlers;
+pub mod landing;
 pub mod routes;
 
 use std::net::SocketAddr;
 use axum::Router;
+use axum::routing::get;
 use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -43,7 +45,10 @@ pub async fn start_server(port: u16, throttle: Throttle) {
     let frontend_dist = find_frontend_dist();
 
     let app = Router::new()
-        .nest("/api", routes::api_routes())
+        .route("/", get(landing::landing_page))
+        .route("/download/{platform}", get(landing::download_installer))
+        .nest("/api", routes::api_routes()
+            .route("/installers", get(landing::list_installers)))
         .nest_service(
             "/app",
             ServeDir::new(&frontend_dist)
