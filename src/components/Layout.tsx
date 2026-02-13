@@ -1,9 +1,16 @@
+import { useEffect } from "react";
 import { Link } from "react-router";
 import { useDeviceStore } from "../stores/deviceStore";
+import { getLocalDeviceInfo } from "../services/localApi";
 import TransferQueue from "./TransferQueue";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const localDevice = useDeviceStore((s) => s.localDevice);
+  const setLocalDevice = useDeviceStore((s) => s.setLocalDevice);
+
+  useEffect(() => {
+    getLocalDeviceInfo().then(setLocalDevice).catch(console.error);
+  }, [setLocalDevice]);
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-200">

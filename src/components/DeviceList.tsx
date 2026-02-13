@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useDeviceStore } from "../stores/deviceStore";
-import { getDevices, getLocalDeviceInfo } from "../services/localApi";
+import { getDevices } from "../services/localApi";
 import { Device } from "../types";
 
 const platformIcons: Record<string, string> = {
@@ -11,11 +11,10 @@ const platformIcons: Record<string, string> = {
 };
 
 export default function DeviceList() {
-  const { devices, localDevice, selectedDevice, setDevices, setLocalDevice, selectDevice } =
+  const { devices, localDevice, selectedDevice, setDevices, selectDevice } =
     useDeviceStore();
 
   useEffect(() => {
-    getLocalDeviceInfo().then(setLocalDevice);
     getDevices().then(setDevices);
 
     const poll = setInterval(() => {
@@ -23,7 +22,7 @@ export default function DeviceList() {
     }, 3000);
 
     return () => clearInterval(poll);
-  }, []);
+  }, [setDevices]);
 
   const renderDevice = (device: Device, isLocal: boolean) => {
     const isSelected = selectedDevice?.ip === device.ip;
