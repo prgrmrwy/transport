@@ -5,10 +5,20 @@ use std::net::SocketAddr;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
-pub async fn start_server(port: u16) {
+use crate::transfer::throttle::Throttle;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub throttle: Throttle,
+}
+
+pub async fn start_server(port: u16, throttle: Throttle) {
+    let state = AppState { throttle };
+
     let app = Router::new()
         .nest("/api", routes::api_routes())
-        .layer(CorsLayer::permissive());
+        .layer(CorsLayer::permissive())
+        .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     println!("Transport server listening on {}", addr);

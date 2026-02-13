@@ -1,11 +1,12 @@
 use axum::body::Body;
-use axum::extract::{Multipart, Query};
+use axum::extract::{Multipart, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::Json;
 use serde::Serialize;
-use tokio::io::AsyncWriteExt;
-use tokio_util::io::ReaderStream;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+use super::AppState;
 
 // --- Device Info ---
 
@@ -99,6 +100,7 @@ pub struct FilePathQuery {
 }
 
 pub async fn download_file(
+    State(state): State<AppState>,
     Query(query): Query<FilePathQuery>,
 ) -> Result<Response, (StatusCode, String)> {
     let path = std::path::Path::new(&query.path);
@@ -121,12 +123,31 @@ pub async fn download_file(
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "download".to_string());
 
-    let stream = ReaderStream::new(file);
+    let content_length = metadata.len();
+    let throttle = state.throttle.clone();
+
+    let stream = async_stream::stream! {
+        let mut reader = tokio::io::BufReader::new(file);
+        let mut buf = vec![0u8; 64 * 1024]; // 64KB chunks
+        loop {
+            let n = match reader.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) => {
+                    yield Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+                    break;
+                }
+            };
+            throttle.consume(n).await;
+            yield Ok::<_, std::io::Error>(bytes::Bytes::copy_from_slice(&buf[..n]));
+        }
+    };
+
     let body = Body::from_stream(stream);
 
     Ok(Response::builder()
         .header(header::CONTENT_TYPE, "application/octet-stream")
-        .header(header::CONTENT_LENGTH, metadata.len())
+        .header(header::CONTENT_LENGTH, content_length)
         .header(
             header::CONTENT_DISPOSITION,
             format!("attachment; filename=\"{}\"", file_name),
@@ -228,6 +249,26 @@ pub async fn delete_file(
     }
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(serde_json::json!({"ok": true})))
+}
+
+// --- Throttle Settings (for browser mode) ---
+
+#[derive(serde::Deserialize)]
+pub struct ThrottleRequest {
+    pub bytes_per_sec: u64,
+}
+
+pub async fn get_throttle(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let rate = state.throttle.get_rate().await;
+    Json(serde_json::json!({"bytes_per_sec": rate}))
+}
+
+pub async fn set_throttle(
+    State(state): State<AppState>,
+    Json(body): Json<ThrottleRequest>,
+) -> Json<serde_json::Value> {
+    state.throttle.set_rate(body.bytes_per_sec).await;
+    Json(serde_json::json!({"ok": true}))
 }
 
 // --- Tests ---
