@@ -1,9 +1,16 @@
+import { isTauri } from "../lib/env";
 import { FileEntry } from "../types";
 import logger from "../lib/logger";
 
 const log = logger.child({ module: "remoteApi" });
 
 function deviceUrl(ip: string, port: number, path: string): string {
+  // In browser mode, use relative URL so requests go through
+  // Vite proxy (dev) or same-origin (production). This avoids
+  // cross-origin issues when page origin differs from API server.
+  if (!isTauri) {
+    return path;
+  }
   return `http://${ip}:${port}${path}`;
 }
 

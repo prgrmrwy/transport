@@ -36,6 +36,9 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
+      // WSL2 挂载的 Windows 文件系统不支持 inotify，需要轮询
+      usePolling: true,
+      interval: 500,
       ignored: ["**/src-tauri/**"],
     },
     // 代理 API 请求到 axum 后端

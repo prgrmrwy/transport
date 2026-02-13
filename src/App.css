@@ -3,4 +3,11 @@
 html, body, #root {
   height: 100%;
   margin: 0;
+  /* 消除移动端 300ms 触摸延迟（禁用双击缩放） */
+  touch-action: manipulation;
+}
+
+/* 移动端安全区域（刘海屏、底部手势条、VR 头显边框） */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

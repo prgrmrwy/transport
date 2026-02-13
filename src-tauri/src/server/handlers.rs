@@ -272,6 +272,35 @@ pub async fn set_throttle(
     Json(serde_json::json!({"ok": true}))
 }
 
+// --- Log Sink (receives browser pino logs, writes to logs/ folder) ---
+
+pub async fn receive_logs(
+    body: axum::body::Bytes,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use std::io::Write;
+
+    let logs_dir = std::path::Path::new("logs");
+    if !logs_dir.exists() {
+        std::fs::create_dir_all(logs_dir)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let log_file = logs_dir.join(format!("frontend-{}.log", today));
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let timestamp = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f");
+    writeln!(file, "[{}] {}", timestamp, String::from_utf8_lossy(&body))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({"ok": true})))
+}
+
 // --- Tests ---
 
 #[cfg(test)]

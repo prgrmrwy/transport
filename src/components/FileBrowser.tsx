@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { useDeviceStore } from "../stores/deviceStore";
 import { useTransferStore } from "../stores/transferStore";
 import { listFiles, downloadFile, uploadFile, deleteFile, createDirectory, renameFile } from "../services/remoteApi";
+import { isVR } from "../lib/useIsMobile";
 import { FileEntry } from "../types";
 import PathNav from "./PathNav";
 import FileItem from "./FileItem";
@@ -13,7 +15,13 @@ export default function FileBrowser() {
   const addTask = useTransferStore((s) => s.addTask);
   const updateTask = useTransferStore((s) => s.updateTask);
 
-  const [currentPath, setCurrentPath] = useState("/");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentPath = searchParams.get("path") || "/";
+  const setCurrentPath = (path: string) => {
+    setSearchParams(path === "/" ? {} : { path });
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -33,11 +41,19 @@ export default function FileBrowser() {
     }
   }, [selectedDevice, currentPath]);
 
+  const prevDeviceIp = useRef(selectedDevice?.ip);
   useEffect(() => {
-    setCurrentPath("/");
-    setSelected(new Set());
-    setEntries([]);
-  }, [selectedDevice?.ip]);
+    if (prevDeviceIp.current !== selectedDevice?.ip) {
+      // 从一个设备切换到另一个设备时重置路径；初始加载（undefined→ip）不重置
+      const wasSwitch = prevDeviceIp.current !== undefined;
+      prevDeviceIp.current = selectedDevice?.ip;
+      if (wasSwitch) {
+        setSearchParams({});
+      }
+      setSelected(new Set());
+      setEntries([]);
+    }
+  }, [selectedDevice?.ip, setSearchParams]);
 
   useEffect(() => {
     loadFiles();
@@ -75,7 +91,7 @@ export default function FileBrowser() {
 
   const doUploadFiles = async (files: File[]) => {
     for (const file of files) {
-      const taskId = crypto.randomUUID();
+      const taskId = Math.random().toString(36).slice(2) + Date.now().toString(36);
       addTask({
         id: taskId,
         fileName: file.name,
@@ -98,14 +114,13 @@ export default function FileBrowser() {
   };
 
   const handleUpload = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.multiple = true;
-    input.onchange = async () => {
-      if (!input.files) return;
-      await doUploadFiles(Array.from(input.files));
-    };
-    input.click();
+    fileInputRef.current?.click();
+  };
+
+  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    await doUploadFiles(Array.from(e.target.files));
+    e.target.value = "";
   };
 
   const handleDownload = async () => {
@@ -113,7 +128,15 @@ export default function FileBrowser() {
       const entry = entries.find((e) => e.name === name);
       if (!entry || entry.is_dir) continue;
       const filePath = currentPath === "/" ? `/${name}` : `${currentPath}/${name}`;
-      const taskId = crypto.randomUUID();
+      const downloadUrl = `/api/files/download?path=${encodeURIComponent(filePath)}`;
+
+      // VR 浏览器不支持 blob 下载，直接用原生链接
+      if (isVR) {
+        window.open(downloadUrl, "_blank");
+        continue;
+      }
+
+      const taskId = Math.random().toString(36).slice(2) + Date.now().toString(36);
       addTask({
         id: taskId,
         fileName: name,
@@ -192,6 +215,13 @@ export default function FileBrowser() {
 
   return (
     <div className="flex flex-col h-full">
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="absolute w-0 h-0 opacity-0 overflow-hidden"
+        onChange={onFileSelected}
+      />
       <PathNav path={currentPath} onNavigate={navigateTo} />
       <Toolbar
         onUpload={handleUpload}
@@ -239,8 +269,18 @@ export default function FileBrowser() {
               onClick: () => {
                 const entry = contextMenu.entry;
                 if (entry.is_dir) return;
-                setSelected(new Set([entry.name]));
-                handleDownload();
+                const filePath = currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`;
+                const downloadUrl = `/api/files/download?path=${encodeURIComponent(filePath)}`;
+                if (isVR) {
+                  window.open(downloadUrl, "_blank");
+                } else {
+                  const a = document.createElement("a");
+                  a.href = downloadUrl;
+                  a.download = entry.name;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                }
               },
               disabled: contextMenu.entry.is_dir,
             },
