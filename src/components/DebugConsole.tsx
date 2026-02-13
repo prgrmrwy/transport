@@ -64,12 +64,17 @@ const levelColors: Record<string, string> = {
 
 const MIN_W = 200;
 const MIN_H = 100;
+const isMobileScreen = window.innerWidth < 768;
 
 export default function DebugConsole() {
   const [, forceUpdate] = useState(0);
-  const [collapsed, setCollapsed] = useState(false);
-  const [pos, setPos] = useState({ x: 20, y: 20 });
-  const [size, setSize] = useState({ w: 600, h: 800 });
+  const [collapsed, setCollapsed] = useState(true);
+  const [pos, setPos] = useState({ x: isMobileScreen ? 8 : 20, y: isMobileScreen ? 40 : 20 });
+  const [size, setSize] = useState(
+    isMobileScreen
+      ? { w: window.innerWidth - 16, h: Math.round(window.innerHeight * 0.45) }
+      : { w: 600, h: 800 }
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
