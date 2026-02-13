@@ -12,11 +12,11 @@ const isDev = process.env.NODE_ENV !== "production";
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [
-    react({
+    react(isDev ? {
       babel: {
-        plugins: ["@locator/babel-jsx"],
+        plugins: [await import("@locator/babel-jsx").then((m) => m.default)],
       },
-    }),
+    } : {}),
     tailwindcss(),
   ],
   // dev server: base = / (直接访问 localhost:1420)
