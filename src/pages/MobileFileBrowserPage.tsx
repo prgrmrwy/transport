@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, Link } from "react-router";
 import { useTransferStore } from "../stores/transferStore";
+import { useDeviceStore } from "../stores/deviceStore";
 import { listFiles, uploadFile, deleteFile, createDirectory, renameFile } from "../services/remoteApi";
 import { FileEntry } from "../types";
 
@@ -9,8 +10,10 @@ export default function MobileFileBrowserPage() {
   const [searchParams] = useSearchParams();
   const addTask = useTransferStore((s) => s.addTask);
   const updateTask = useTransferStore((s) => s.updateTask);
+  const localDevice = useDeviceStore((s) => s.localDevice);
 
-  const currentPath = searchParams.get("path") || "/";
+  const defaultPath = localDevice?.home_dir || "/";
+  const currentPath = searchParams.get("path") || defaultPath;
   // 浏览器模式下 remoteApi 忽略 ip/port，使用相对路径
   const deviceIp = "";
   const devicePort = 0;

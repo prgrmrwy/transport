@@ -16,12 +16,17 @@ pub struct DeviceInfo {
     pub platform: String,
     pub ip: String,
     pub port: u16,
+    pub home_dir: String,
 }
 
 pub async fn device_info() -> Json<DeviceInfo> {
     let ip = local_ip_address::local_ip()
         .map(|ip| ip.to_string())
         .unwrap_or_else(|_| "unknown".to_string());
+
+    let home_dir = dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "/".to_string());
 
     Json(DeviceInfo {
         name: hostname::get()
@@ -30,6 +35,7 @@ pub async fn device_info() -> Json<DeviceInfo> {
         platform: std::env::consts::OS.to_string(),
         ip,
         port: 8090,
+        home_dir,
     })
 }
 
@@ -63,10 +69,11 @@ pub async fn list_files(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     {
-        let metadata = entry
-            .metadata()
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        // 跳过无法读取 metadata 的条目（权限不足等）
+        let metadata = match entry.metadata().await {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
 
         let modified = metadata
             .modified()
@@ -127,8 +134,8 @@ pub async fn download_file(
     let throttle = state.throttle.clone();
 
     let stream = async_stream::stream! {
-        let mut reader = tokio::io::BufReader::new(file);
-        let mut buf = vec![0u8; 64 * 1024]; // 64KB chunks
+        let mut reader = tokio::io::BufReader::with_capacity(512 * 1024, file);
+        let mut buf = vec![0u8; 512 * 1024]; // 512KB chunks
         loop {
             let n = match reader.read(&mut buf).await {
                 Ok(0) => break,
@@ -139,7 +146,7 @@ pub async fn download_file(
                 }
             };
             throttle.consume(n).await;
-            yield Ok::<_, std::io::Error>(bytes::Bytes::copy_from_slice(&buf[..n]));
+            yield Ok::<_, std::io::Error>(bytes::Bytes::from(buf[..n].to_vec()));
         }
     };
 

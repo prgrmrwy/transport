@@ -51,7 +51,7 @@ export default function MobileHomePage() {
 function DeviceCard({ device, isLocal }: { device: Device; isLocal: boolean }) {
   return (
     <Link
-      to={`/browse?path=/`}
+      to={`/browse?path=${encodeURIComponent(device.home_dir || "/")}`}
       className="block w-full text-left px-4 py-3 rounded-xl bg-slate-800 active:bg-slate-700 transition"
     >
       <div className="flex items-center gap-3">

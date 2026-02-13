@@ -16,9 +16,10 @@ export default function FileBrowser() {
   const updateTask = useTransferStore((s) => s.updateTask);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const currentPath = searchParams.get("path") || "/";
+  const defaultPath = selectedDevice?.home_dir || "/";
+  const currentPath = searchParams.get("path") || defaultPath;
   const setCurrentPath = (path: string) => {
-    setSearchParams(path === "/" ? {} : { path });
+    setSearchParams(path === defaultPath ? {} : { path });
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
