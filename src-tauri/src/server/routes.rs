@@ -1,3 +1,4 @@
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post, put};
 use axum::Router;
 
@@ -19,4 +20,5 @@ pub fn api_routes() -> Router<AppState> {
             "/settings/throttle",
             get(handlers::get_throttle).put(handlers::set_throttle),
         )
+        .layer(DefaultBodyLimit::disable())
 }

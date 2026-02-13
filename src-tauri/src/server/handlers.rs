@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::{Multipart, Query, State};
+use axum::extract::{Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
 use axum::Json;
@@ -156,15 +156,15 @@ pub async fn download_file(
         .unwrap())
 }
 
-// --- File Upload (multipart) ---
+// --- File Upload (multipart, streaming, no size limit) ---
 
 pub async fn upload_file(
-    mut multipart: Multipart,
+    mut multipart: axum::extract::Multipart,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let mut target_dir = String::new();
     let mut files_saved: Vec<String> = Vec::new();
 
-    while let Some(field) = multipart
+    while let Some(mut field) = multipart
         .next_field()
         .await
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?
@@ -181,21 +181,22 @@ pub async fn upload_file(
 
         if field_name == "file" {
             let file_name = field.file_name().unwrap_or("unnamed").to_string();
-
             let dest = std::path::Path::new(&target_dir).join(&file_name);
 
             let mut file = tokio::fs::File::create(&dest)
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-            let bytes = field
-                .bytes()
+            // 流式写入，不把整个文件加载到内存
+            while let Some(chunk) = field
+                .chunk()
                 .await
-                .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-
-            file.write_all(&bytes)
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+                .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?
+            {
+                file.write_all(&chunk)
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            }
 
             files_saved.push(file_name);
         }
