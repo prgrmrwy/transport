@@ -11,7 +11,14 @@ const isDev = process.env.NODE_ENV !== "production";
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: ["@locator/babel-jsx"],
+      },
+    }),
+    tailwindcss(),
+  ],
   // dev server: base = / (直接访问 localhost:1420)
   // production build for axum: base = /app/
   // Tauri build: base = /
