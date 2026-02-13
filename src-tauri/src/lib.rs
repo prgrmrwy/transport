@@ -1,4 +1,7 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod server;
+
+use tauri::async_runtime::spawn;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -9,6 +12,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet])
+        .setup(|_app| {
+            spawn(server::start_server(8090));
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
